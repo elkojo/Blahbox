@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF9F6">
+  <meta name="description" content="A pocket soundboard that works offline.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Blahbox">
+  <title>Blahbox</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Blahbox</h1>
+    <div class="actions">
+      <button id="arrangeBtn" class="text-btn" type="button" aria-pressed="false">Edit</button>
+      <button id="addBtn" class="icon-btn" type="button" aria-label="Add sound">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>
+      </button>
+      <button id="menuBtn" class="icon-btn" type="button" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="5" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="19" cy="12" r="2" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <p id="arrangeHint" class="hint" hidden>Drag pads to reorder · tap a pad to edit it</p>
+    <div id="grid" class="grid"></div>
+    <div id="empty" class="empty" hidden>
+      <p>No sounds yet.</p>
+      <p class="muted">Tap <strong>+</strong> to add a file or record one.</p>
+    </div>
+  </main>
+
+  <button id="stopBtn" class="stop-fab" type="button" hidden>
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/></svg>
+    Stop all
+  </button>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden>
+    <span id="toastText"></span>
+    <button id="toastAction" type="button" hidden></button>
+  </div>
+
+  <!-- Add / edit sound -->
+  <dialog id="editor" aria-labelledby="editorTitle">
+    <form id="editorForm" class="sheet" novalidate>
+      <div class="sheet-head">
+        <h2 id="editorTitle" tabindex="-1" autofocus>New sound</h2>
+        <div id="editorPreview" class="pad pad-preview" aria-hidden="true">
+          <span class="pad-emoji"></span><span class="pad-label"></span>
+        </div>
+      </div>
+
+      <section id="soundSection" class="field">
+        <span class="field-label">Sound</span>
+        <div class="sound-source" id="soundSource">
+          <button id="pickFileBtn" class="btn" type="button">Choose file</button>
+          <button id="recordBtn" class="btn" type="button">● Record</button>
+          <input id="fileInput" type="file" accept="audio/*" hidden>
+        </div>
+        <div class="sound-status">
+          <span id="soundStatus" class="muted"></span>
+          <button id="previewBtn" class="btn btn-small" type="button">▶ Play</button>
+        </div>
+      </section>
+
+      <label class="field">
+        <span class="field-label">Name</span>
+        <input id="fName" type="text" maxlength="40" autocomplete="off" enterkeyhint="done">
+      </label>
+
+      <div class="field">
+        <label class="field-label" for="fEmoji">Emoji <span class="muted">(optional)</span></label>
+        <div class="emoji-row">
+          <input id="fEmoji" type="text" maxlength="8" autocomplete="off" class="emoji-input" enterkeyhint="done">
+          <div id="emojiPicks" class="emoji-picks"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="field-label">Color</span>
+        <div id="swatches" class="swatches" role="radiogroup" aria-label="Color"></div>
+      </div>
+
+      <div class="sheet-actions">
+        <button id="deleteBtn" class="btn btn-danger" type="button">Delete</button>
+        <span class="spacer"></span>
+        <button id="cancelBtn" class="btn" type="button">Cancel</button>
+        <button id="saveBtn" class="btn btn-primary" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Settings -->
+  <dialog id="settings" aria-labelledby="settingsTitle">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2 id="settingsTitle" tabindex="-1" autofocus>Settings</h2>
+      </div>
+
+      <div class="setting-row">
+        <span>Pads per row</span>
+        <div id="colsSeg" class="seg" role="group" aria-label="Pads per row">
+          <button type="button" data-cols="2">2</button>
+          <button type="button" data-cols="3">3</button>
+          <button type="button" data-cols="4">4</button>
+        </div>
+      </div>
+
+      <div class="setting-block">
+        <div class="setting-row">
+          <span>Backup</span>
+          <div class="row-buttons">
+            <button id="exportBtn" class="btn btn-small" type="button">Export</button>
+            <button id="importBtn" class="btn btn-small" type="button">Import</button>
+            <input id="importInput" type="file" accept=".json,application/json" hidden>
+          </div>
+        </div>
+        <p class="muted small">Your own sounds live only on this device. Export a backup file to keep them safe or move them to another phone.</p>
+      </div>
+
+      <div id="hiddenSection" class="setting-block" hidden>
+        <span class="field-label">Hidden sounds</span>
+        <ul id="hiddenList" class="hidden-list"></ul>
+      </div>
+
+      <p id="storageInfo" class="muted small"></p>
+
+      <div class="sheet-actions">
+        <span class="spacer"></span>
+        <button id="settingsDone" class="btn btn-primary" type="button">Done</button>
+      </div>
+    </div>
+  </dialog>
+</body>
+</html>
