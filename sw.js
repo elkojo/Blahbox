@@ -1,6 +1,6 @@
 // Bump VERSION whenever you change any app file or add a built-in sound,
 // so installed phones pick up the new version.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = 'blahbox-' + VERSION;
 
 const APP_SHELL = [

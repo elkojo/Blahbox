@@ -145,17 +145,10 @@ const player = {
     return new Promise((resolve, reject) => ctx.decodeAudioData(data.slice(0), resolve, reject));
   },
 
-  // Turns raw file data into a playable sound; rejects if the device can't play it.
+  // Turns raw file data into a playable sound.
   async prepare({ type, data }) {
     if (data.byteLength < STREAM_MIN_BYTES) return { buffer: await this.decode(data) };
-    const url = URL.createObjectURL(new Blob([data], { type }));
-    try {
-      await probeMedia(url);
-    } catch (err) {
-      URL.revokeObjectURL(url);
-      throw err;
-    }
-    return { url };
+    return { url: URL.createObjectURL(new Blob([data], { type })) };
   },
 
   load(button) {
@@ -225,12 +218,15 @@ const player = {
   isPlaying: (id) => player.voices.has(id),
 };
 
+// Reads a streamed sound's duration; rejects if the format is unplayable. Resolves NaN when
+// the browser won't load metadata up front (iOS ignores preload; background tabs defer it).
 function probeMedia(url) {
   return new Promise((resolve, reject) => {
     const media = new Audio();
     media.preload = 'metadata';
     media.onloadedmetadata = () => resolve(media.duration);
     media.onerror = () => reject(new Error('unplayable'));
+    setTimeout(() => resolve(NaN), 3000);
     media.src = url;
   });
 }
@@ -562,12 +558,13 @@ async function useSound(blob, label) {
     sound = await player.prepare(record);
     duration = sound.buffer ? sound.buffer.duration : await probeMedia(sound.url);
   } catch {
+    if (sound?.url) URL.revokeObjectURL(sound.url);
     toast("Couldn't read that audio file");
     return;
   }
   if (!edit) return;
   edit.sound = { ...record, sound };
-  soundStatus.textContent = `${label} · ${formatDuration(duration)}`;
+  soundStatus.textContent = Number.isFinite(duration) ? `${label} · ${formatDuration(duration)}` : label;
   previewBtn.disabled = false;
   if (!fName.value.trim() && blob.name) fName.value = prettyName(blob.name);
   updateEditorPreview();
