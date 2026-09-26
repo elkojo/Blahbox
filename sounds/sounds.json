@@ -2,5 +2,13 @@
   { "file": "Deleeej.mp3", "name": "Deleeej", "emoji": "🎉", "color": "lemon" },
   { "file": "ToiletFlush.mp3", "name": "Toilet flush", "emoji": "🚽", "color": "sky" },
   { "file": "universfield-whip-snap-242215.mp3", "name": "Whip", "emoji": "💥", "color": "rose" },
-  { "file": "wilrotich-crowd-laughing-06-120584.mp3", "name": "Crowd laugh", "emoji": "😂", "color": "mint" }
+  { "file": "wilrotich-crowd-laughing-06-120584.mp3", "name": "Crowd laugh", "emoji": "😂", "color": "mint" },
+  { "file": "freesound_community-cheering-and-clapping-crowd-1-5995.mp3", "name": "Cheering", "emoji": "👏", "color": "peach" },
+  { "file": "alex_g_tigerrr-arigatoo-japanese-thanks-danke-176536.mp3", "name": "Arigatō", "emoji": "🙏", "color": "lilac" },
+  { "file": "dragon-studio-dog-barking-406629.mp3", "name": "Dog bark", "emoji": "🐶", "color": "sand" },
+  { "file": "flutie8211-car-horn-honking-413906.mp3", "name": "Car horn", "emoji": "🚗", "color": "teal" },
+  { "file": "dragon-studio-police-siren-397963.mp3", "name": "Siren", "emoji": "🚨", "color": "rose" },
+  { "file": "wings_of_freedom-broken-glass-403772.mp3", "name": "Broken glass", "emoji": "🍷", "color": "stone" },
+  { "file": "audiopapkin-male-snoring-297875.mp3", "name": "Snoring", "emoji": "😴", "color": "lavender" },
+  { "file": "dragon-studio-relaxing-rain-444802.mp3", "name": "Rain", "emoji": "🌧️", "color": "sky" }
 ]

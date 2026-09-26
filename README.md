@@ -35,6 +35,7 @@ After that it runs from the home screen with no internet needed.
    { "file": "MySound.mp3", "name": "My sound", "emoji": "🔔", "color": "peach" }
    ```
    Colors: `rose`, `peach`, `lemon`, `mint`, `teal`, `sky`, `lavender`, `lilac`, `sand`, `stone`.
+   Sounds over 2 MB (like the 12-minute rain track) are streamed instead of loaded into memory.
 3. **Bump `VERSION` in `sw.js`** (e.g. `v1` → `v2`) and push.
 
 Installed phones pick up the new version the next time the app is opened online and show an
@@ -58,4 +59,4 @@ Then open <http://localhost:8000>. Service workers need `localhost` or HTTPS, no
 | `sw.js` | Service worker: caches everything for offline use |
 | `manifest.webmanifest` | App name, icons, install settings |
 | `sounds/` | Built-in sounds and `sounds.json` list |
-| `icons/` | App icons |
+| `icons/` | App icons — `icon.svg` is the source; the PNGs are rendered from it |

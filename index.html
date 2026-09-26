@@ -11,7 +11,8 @@
   <meta name="apple-mobile-web-app-title" content="Blahbox">
   <title>Blahbox</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
@@ -125,6 +126,17 @@
           </div>
         </div>
         <p class="muted small">Your own sounds live only on this device. Export a backup file to keep them safe or move them to another phone.</p>
+      </div>
+
+      <div class="setting-block">
+        <span class="field-label">Install on your phone</span>
+        <p id="installedNote" class="small installed" hidden>✓ Blahbox is installed on this device.</p>
+        <p class="small">To install on your phone: open the URL once while online.<br><a id="appUrl" class="app-url"></a></p>
+        <ul class="install-steps small">
+          <li><strong>Android (Chrome):</strong> menu ⋮, then <strong>Install app</strong>.</li>
+          <li><strong>iPhone (Safari):</strong> Share, then <strong>Add to Home Screen</strong>.</li>
+        </ul>
+        <button id="installBtn" class="btn btn-small install-btn" type="button" hidden>Install now</button>
       </div>
 
       <div id="hiddenSection" class="setting-block" hidden>

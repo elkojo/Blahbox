@@ -6,6 +6,9 @@ const MOVE_TOLERANCE = 10;
 const DRAG_THRESHOLD = 6;
 const MAX_RECORD_SECONDS = 60;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
+// Bigger files are streamed through an <audio> element instead of being decoded into
+// memory — a decoded 10-minute track would need hundreds of MB of RAM.
+const STREAM_MIN_BYTES = 2 * 1024 * 1024;
 const PREVIEW_ID = '__preview__';
 
 const COLORS = {
@@ -105,20 +108,22 @@ async function readSound(button) {
   if (button.kind === 'builtin') {
     const res = await fetch(builtinUrl(button.file));
     if (!res.ok) throw new Error('missing sound');
-    return res.arrayBuffer();
+    return { type: res.headers.get('Content-Type') || 'audio/mpeg', data: await res.arrayBuffer() };
   }
   const record = await db.get(button.id);
   if (!record) throw new Error('missing sound');
-  return record.data;
+  return record;
 }
 
 /* ---------- Audio engine ---------- */
 
-// Web Audio gives low-latency, overlapping playback. Buffers are decoded once and reused.
+// Web Audio gives low-latency, overlapping playback for short sounds; they are decoded once
+// and reused. Long sounds play through <audio> elements from a blob URL.
+// A "sound" is { buffer } or { url }.
 const player = {
   ctx: null,
-  buffers: new Map(), // id -> Promise<AudioBuffer>
-  voices: new Map(),  // id -> Set<AudioBufferSourceNode>
+  buffers: new Map(), // id -> Promise<sound>
+  voices: new Map(),  // id -> Set<{ stop() }>
 
   context() {
     if (!this.ctx) {
@@ -140,14 +145,27 @@ const player = {
     return new Promise((resolve, reject) => ctx.decodeAudioData(data.slice(0), resolve, reject));
   },
 
-  load(button) {
-    let buffer = this.buffers.get(button.id);
-    if (!buffer) {
-      buffer = readSound(button).then((data) => this.decode(data));
-      buffer.catch(() => this.buffers.delete(button.id));
-      this.buffers.set(button.id, buffer);
+  // Turns raw file data into a playable sound; rejects if the device can't play it.
+  async prepare({ type, data }) {
+    if (data.byteLength < STREAM_MIN_BYTES) return { buffer: await this.decode(data) };
+    const url = URL.createObjectURL(new Blob([data], { type }));
+    try {
+      await probeMedia(url);
+    } catch (err) {
+      URL.revokeObjectURL(url);
+      throw err;
     }
-    return buffer;
+    return { url };
+  },
+
+  load(button) {
+    let sound = this.buffers.get(button.id);
+    if (!sound) {
+      sound = readSound(button).then((record) => this.prepare(record));
+      sound.catch(() => this.buffers.delete(button.id));
+      this.buffers.set(button.id, sound);
+    }
+    return sound;
   },
 
   forget(id) {
@@ -163,27 +181,43 @@ const player = {
     }
   },
 
-  start(id, buffer) {
-    const ctx = this.unlock();
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
+  start(id, sound) {
     let voices = this.voices.get(id);
     if (!voices) this.voices.set(id, voices = new Set());
-    voices.add(source);
-    source.onended = () => {
-      voices.delete(source);
+    const ended = (voice) => {
+      if (!voices.delete(voice)) return;
       if (!voices.size && this.voices.get(id) === voices) this.voices.delete(id);
       onVoicesChanged(id, null);
     };
-    source.start();
-    onVoicesChanged(id, buffer.duration);
+
+    if (sound.buffer) {
+      const ctx = this.unlock();
+      const source = ctx.createBufferSource();
+      source.buffer = sound.buffer;
+      source.connect(ctx.destination);
+      const voice = { stop: () => source.stop() };
+      voices.add(voice);
+      source.onended = () => ended(voice);
+      source.start();
+      onVoicesChanged(id, sound.buffer.duration);
+      return;
+    }
+
+    const media = new Audio(sound.url);
+    const voice = { stop: () => { media.pause(); ended(voice); } };
+    voices.add(voice);
+    media.addEventListener('ended', () => ended(voice));
+    media.addEventListener('error', () => ended(voice));
+    media.play().then(
+      () => onVoicesChanged(id, media.duration),
+      () => ended(voice),
+    );
   },
 
   stopAll() {
-    for (const voices of this.voices.values()) {
-      for (const source of voices) {
-        try { source.stop(); } catch { /* already stopped */ }
+    for (const voices of [...this.voices.values()]) {
+      for (const voice of [...voices]) {
+        try { voice.stop(); } catch { /* already stopped */ }
       }
     }
   },
@@ -191,10 +225,20 @@ const player = {
   isPlaying: (id) => player.voices.has(id),
 };
 
+function probeMedia(url) {
+  return new Promise((resolve, reject) => {
+    const media = new Audio();
+    media.preload = 'metadata';
+    media.onloadedmetadata = () => resolve(media.duration);
+    media.onerror = () => reject(new Error('unplayable'));
+    media.src = url;
+  });
+}
+
 function onVoicesChanged(id, startedDuration) {
   const pad = grid.querySelector(`.pad[data-id="${CSS.escape(id)}"]`);
   if (pad) {
-    if (startedDuration != null) {
+    if (Number.isFinite(startedDuration)) {
       // Restart the progress bar on every trigger.
       pad.style.setProperty('--dur', startedDuration + 's');
       pad.classList.remove('playing');
@@ -415,7 +459,7 @@ const previewBtn = $('#previewBtn');
 const deleteBtn = $('#deleteBtn');
 const recordBtn = $('#recordBtn');
 
-let edit = null; // { id, builtin, color, sound: {type, data, buffer} | null, armed }
+let edit = null; // { id, builtin, color, sound: { type, data, sound } | null, armed }
 
 function openEditor(id) {
   cancelPress();
@@ -501,7 +545,9 @@ fName.addEventListener('input', updateEditorPreview);
 fEmoji.addEventListener('input', updateEditorPreview);
 fEmoji.addEventListener('focus', () => fEmoji.select());
 
-const formatDuration = (s) => (s < 10 ? s.toFixed(1) : Math.round(s)) + ' s';
+const formatDuration = (s) => (s < 10 ? s.toFixed(1) + ' s'
+  : s < 120 ? Math.round(s) + ' s'
+  : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')} min`);
 const prettyName = (filename) => filename.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim().slice(0, 40);
 
 async function useSound(blob, label) {
@@ -510,17 +556,18 @@ async function useSound(blob, label) {
     toast('That file is too big (max 20 MB)');
     return;
   }
-  const data = await blob.arrayBuffer();
-  let buffer;
+  const record = { type: blob.type || 'audio/mpeg', data: await blob.arrayBuffer() };
+  let sound, duration;
   try {
-    buffer = await player.decode(data);
+    sound = await player.prepare(record);
+    duration = sound.buffer ? sound.buffer.duration : await probeMedia(sound.url);
   } catch {
     toast("Couldn't read that audio file");
     return;
   }
   if (!edit) return;
-  edit.sound = { type: blob.type || 'audio/mpeg', data, buffer };
-  soundStatus.textContent = `${label} · ${formatDuration(buffer.duration)}`;
+  edit.sound = { ...record, sound };
+  soundStatus.textContent = `${label} · ${formatDuration(duration)}`;
   previewBtn.disabled = false;
   if (!fName.value.trim() && blob.name) fName.value = prettyName(blob.name);
   updateEditorPreview();
@@ -535,7 +582,7 @@ $('#fileInput').addEventListener('change', (e) => {
 
 previewBtn.addEventListener('click', () => {
   if (!edit) return;
-  if (edit.sound) player.start(PREVIEW_ID, edit.sound.buffer);
+  if (edit.sound) player.start(PREVIEW_ID, edit.sound.sound);
   else if (edit.id) player.play(findButton(edit.id));
 });
 
@@ -600,7 +647,7 @@ $('#editorForm').addEventListener('submit', async (e) => {
       return;
     }
     player.forget(button.id);
-    player.buffers.set(button.id, Promise.resolve(edit.sound.buffer));
+    player.buffers.set(button.id, Promise.resolve(edit.sound.sound));
     requestPersistence();
   }
   Object.assign(button, { name, emoji: fEmoji.value.trim(), color: edit.color });
@@ -718,6 +765,10 @@ function renderSettings() {
     li.append(label, show);
     return li;
   }));
+  const appUrl = new URL('./', location.href).href;
+  Object.assign($('#appUrl'), { href: appUrl, textContent: appUrl.replace(/^https?:\/\//, '') });
+  $('#installedNote').hidden = !isInstalled();
+  $('#installBtn').hidden = !installPrompt;
   const own = state.buttons.filter((b) => b.kind === 'user').length;
   $('#storageInfo').textContent = `${own} sound${own === 1 ? '' : 's'} of your own · works offline`;
 }
@@ -735,6 +786,29 @@ $('#colsSeg').addEventListener('click', (e) => {
   state.cols = cols;
   saveState();
   render();
+  renderSettings();
+});
+
+/* ---------- Install ---------- */
+
+// Chrome on Android offers its own install prompt; keep it for the "Install now" button.
+let installPrompt = null;
+const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  if (settingsDlg.open) renderSettings();
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  if (settingsDlg.open) renderSettings();
+});
+$('#installBtn').addEventListener('click', async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => {});
+  installPrompt = null;
   renderSettings();
 });
 

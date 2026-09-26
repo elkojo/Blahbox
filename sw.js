@@ -1,6 +1,6 @@
 // Bump VERSION whenever you change any app file or add a built-in sound,
 // so installed phones pick up the new version.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'blahbox-' + VERSION;
 
 const APP_SHELL = [
@@ -9,6 +9,7 @@ const APP_SHELL = [
   'styles.css',
   'app.js',
   'manifest.webmanifest',
+  'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/icon-maskable-512.png',
